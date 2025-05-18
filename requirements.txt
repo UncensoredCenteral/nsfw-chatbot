@@ -2,4 +2,3 @@ transformers
 torch
 flask
 accelerate
-bitsandbytes
