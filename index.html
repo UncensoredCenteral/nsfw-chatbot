@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>NSFW AI Chatbot</title>
+  <style>
+    body { font-family: monospace; background: #111; color: #eee; padding: 20px; }
+    #chat { white-space: pre-wrap; border: 1px solid #444; padding: 10px; height: 400px; overflow-y: scroll; }
+    input, button { margin-top: 10px; width: 100%; }
+  </style>
+</head>
+<body>
+  <h1>NSFW Chatbot 🤖🔥</h1>
+  <div id="chat"></div>
+  <input id="userInput" placeholder="Type your dirty thoughts..." />
+  <button onclick="sendMessage()">Send</button>
+
+  <script>
+    let chatHistory = [];
+
+    async function sendMessage() {
+      const userInput = document.getElementById("userInput").value;
+      if (!userInput) return;
+
+      chatHistory.push({ role: "user", content: userInput });
+      document.getElementById("chat").innerText += `You: ${userInput}\n`;
+      document.getElementById("userInput").value = "";
+
+      const payload = {
+        prompt: buildPrompt(),
+        params: {
+          max_tokens: 100,
+          temperature: 0.9,
+          top_p: 0.8,
+        },
+        model: "koboldcpp",
+        workers: "preferred",
+        n: 1
+      };
+
+      const res = await fetch("https://horde.koboldai.net/api/v2/generate/text/async", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const job = await res.json();
+      const jobId = job.id;
+
+      let result;
+      do {
+        await new Promise(r => setTimeout(r, 2000));
+        const check = await fetch(`https://horde.koboldai.net/api/v2/generate/text/status/${jobId}`);
+        result = await check.json();
+      } while (!result.done);
+
+      const reply = result.generations[0].text.trim();
+      chatHistory.push({ role: "assistant", content: reply });
+      document.getElementById("chat").innerText += `Bot: ${reply}\n`;
+    }
+
+    function buildPrompt() {
+      return chatHistory.map(entry =>
+        `${entry.role === "user" ? "You" : "Bot"}: ${entry.content}`
+      ).join("\n") + "\nBot:";
+    }
+  </script>
+</body>
+</html>
