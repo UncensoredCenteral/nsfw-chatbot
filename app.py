@@ -12,8 +12,17 @@ def index():
 def chat():
     user_input = request.json["message"]
 
-    inputs = tokenizer(user_input, return_tensors="pt").to(model.device)
-    outputs = model.generate(**inputs, max_new_tokens=150, do_sample=True, temperature=0.9, top_p=0.95)
+    inputs = tokenizer(user_input, return_tensors="pt").to("cpu")
+    model.to("cpu")
+    outputs = model.generate(
+    **inputs,
+    max_new_tokens=100,
+    do_sample=True,
+    temperature=0.8,
+    top_p=0.9,
+    repetition_penalty=1.1,
+    pad_token_id=tokenizer.eos_token_id
+    )
     reply = tokenizer.decode(outputs[0], skip_special_tokens=True)
 
     return jsonify({"reply": reply.strip()})
