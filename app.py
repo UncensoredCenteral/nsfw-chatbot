@@ -1,31 +1,12 @@
-from flask import Flask, request, render_template, jsonify
-from model_loader import load_model
+from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
 
-app = Flask(__name__)
-model, tokenizer = load_model()
+model_name = "mrm8488/GPT-2-finetuned-cornell-movie-dialog"
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name)
 
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-@app.route("/chat", methods=["POST"])
-def chat():
-    user_input = request.json["message"]
-
-    inputs = tokenizer(user_input, return_tensors="pt").to("cpu")
-    model.to("cpu")
-    outputs = model.generate(
-    **inputs,
-    max_new_tokens=100,
-    do_sample=True,
-    temperature=0.8,
-    top_p=0.9,
-    repetition_penalty=1.1,
-    pad_token_id=tokenizer.eos_token_id
-    )
-    reply = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-    return jsonify({"reply": reply.strip()})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=7860)
+while True:
+    prompt = input("You: ")
+    inputs = tokenizer(prompt, return_tensors="pt")
+    outputs = model.generate(**inputs, max_new_tokens=100, pad_token_id=tokenizer.eos_token_id)
+    print("Bot:", tokenizer.decode(outputs[0], skip_special_tokens=True))
