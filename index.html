@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NSFW AI Horde Chatbot</title>
+<style>
+  body { background:#121212; color:#eee; font-family: Arial, sans-serif; margin:0; padding:0; display:flex; flex-direction: column; height: 100vh; }
+  header { background:#222; padding:1rem; text-align:center; font-size:1.5rem; font-weight:bold; }
+  #container { flex:1; display:flex; flex-direction: row; overflow: hidden; }
+  #left, #right { padding:1rem; overflow-y:auto; }
+  #left { width: 50%; border-right: 1px solid #333; display:flex; flex-direction: column; }
+  #chat { flex:1; background:#181818; padding:1rem; border-radius:8px; overflow-y: auto; margin-bottom:1rem; }
+  .msg { margin-bottom: 1rem; }
+  .msg.user { color:#4ade80; }
+  .msg.ai { color:#f87171; }
+  #inputSection { display:flex; }
+  #textInput { flex:1; padding:0.5rem; border-radius:4px; border:none; font-size:1rem; }
+  button { margin-left:0.5rem; padding:0.5rem 1rem; background:#f87171; border:none; border-radius:4px; cursor:pointer; color:#fff; font-weight:bold; }
+  button:hover { background:#ef4444; }
+  #right { width: 50%; display: flex; flex-direction: column; }
+  #gallery { flex: 1; background:#181818; border-radius:8px; padding:0.5rem; overflow-y: auto; display:flex; flex-wrap: wrap; gap: 0.5rem; }
+  #gallery img { max-width: 100px; max-height: 100px; border-radius: 6px; cursor:pointer; }
+  #personaSelect, #safeModeToggle, #promptRandomizer { margin-bottom: 1rem; }
+  select, label { font-size:1rem; }
+  #logControls { margin-bottom: 1rem; }
+  #logControls button { background:#3b82f6; }
+  #logControls button:hover { background:#2563eb; }
+  #promptRandomizer button { background:#fbbf24; }
+  #promptRandomizer button:hover { background:#f59e0b; }
+  #imagePreviewModal { position: fixed; top:0; left:0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.9); display:none; justify-content:center; align-items:center; }
+  #imagePreviewModal img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+  #imagePreviewModal:target { display: flex; }
+</style>
+</head>
+<body>
+
+<header>🔥 NSFW AI Horde Chatbot 🔥</header>
+
+<div id="container">
+  <section id="left">
+    <div id="controls">
+      <select id="personaSelect" title="Choose your AI persona">
+        <option value="default">Default (Friendly)</option>
+        <option value="flirty">Flirty AF</option>
+        <option value="dominant">Dominant</option>
+      </select>
+      <label><input type="checkbox" id="safeModeToggle" /> Safe Mode (SFW)</label>
+    </div>
+    <div id="chat"></div>
+    <div id="inputSection">
+      <input type="text" id="textInput" placeholder="Say something naughty..." autocomplete="off" />
+      <button id="sendBtn">Send</button>
+      <button id="retryBtn" title="Retry last AI response">⟳</button>
+    </div>
+    <div id="logControls">
+      <button id="saveLogBtn" title="Save chat log">💾 Save Log</button>
+      <button id="loadLogBtn" title="Load chat log">📂 Load Log</button>
+      <input type="file" id="loadFileInput" style="display:none" accept=".json" />
+    </div>
+  </section>
+
+  <section id="right">
+    <div id="promptRandomizer">
+      <label for="promptCategory">Random NSFW Prompt:</label>
+      <select id="promptCategory">
+        <option value="all">All</option>
+        <option value="fantasy">Fantasy</option>
+        <option value="cosplay">Cosplay</option>
+        <option value="alien">Alien</option>
+        <option value="cyberpunk">Cyberpunk</option>
+      </select>
+      <button id="randomPromptBtn">🎲 Generate Prompt</button>
+    </div>
+    <div id="gallery"></div>
+  </section>
+</div>
+
+<div id="imagePreviewModal">
+  <a href="#" style="position:absolute; top:1rem; right:1rem; color:#fff; font-size:2rem; text-decoration:none;">&times;</a>
+  <img id="previewImage" src="" alt="Preview" />
+</div>
+
+<script>
+const API_KEY = "GRS_lbLpJbTf99Rlr1Fezw"; // Replace with your AI Horde API key
+const AI_HORDE_CHAT_URL = "https://aihorde.net/api/v2/generate/text/async"; 
+const AI_HORDE_IMAGE_URL = "https://aihorde.net/api/v2/generate/async";
+
+let chatLog = [];
+let lastUserMessage = "";
+let lastAIResponse = "";
+let safeMode = false;
+
+const personas = {
+  default: {
+    prefix: "You are a friendly and sexy assistant, responding with warmth and fun.",
+  },
+  flirty: {
+    prefix: "You are a super flirty AI, dropping playful and seductive lines.",
+  },
+  dominant: {
+    prefix: "You are a dominant AI, commanding and assertive in tone.",
+  },
+};
+
+const randomPrompts = {
+  all: [
+    "Sexy elf in the forest, sultry and mystical",
+    "Cyberpunk babe with neon tattoos, confident and fierce",
+    "Alien seductress with glowing eyes, mysterious and alluring",
+    "Cosplay girl in revealing outfit, playful and cute",
+    "Fantasy warrior queen in armor, strong and sexy",
+  ],
+  fantasy: [
+    "Sexy elf in the forest, sultry and mystical",
+    "Fantasy warrior queen in armor, strong and sexy",
+  ],
+  cosplay: [
+    "Cosplay girl in revealing outfit, playful and cute",
+  ],
+  alien: [
+    "Alien seductress with glowing eyes, mysterious and alluring",
+  ],
+  cyberpunk: [
+    "Cyberpunk babe with neon tattoos, confident and fierce",
+  ],
+};
+
+const chatEl = document.getElementById("chat");
+const textInput = document.getElementById("textInput");
+const sendBtn = document.getElementById("sendBtn");
+const retryBtn = document.getElementById("retryBtn");
+const personaSelect = document.getElementById("personaSelect");
+const safeModeToggle = document.getElementById("safeModeToggle");
+const saveLogBtn = document.getElementById("saveLogBtn");
+const loadLogBtn = document.getElementById("loadLogBtn");
+const loadFileInput = document.getElementById("loadFileInput");
+const gallery = document.getElementById("gallery");
+const promptCategory = document.getElementById("promptCategory");
+const randomPromptBtn = document.getElementById("randomPromptBtn");
+const previewModal = document.getElementById("imagePreviewModal");
+const previewImage = document.getElementById("previewImage");
+
+safeModeToggle.addEventListener("change", () => {
+  safeMode = safeModeToggle.checked;
+  addSystemMessage(safeMode ? "Safe mode ON: No NSFW content." : "Safe mode OFF: Get ready for naughty fun!");
+});
+
+function addSystemMessage(text) {
+  const div = document.createElement("div");
+  div.className = "msg ai";
+  div.style.fontStyle = "italic";
+  div.textContent = text;
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+function addMessage(text, from = "user") {
+  const div = document.createElement("div");
+  div.className = "msg " + from;
+  div.textContent = text;
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  if (from === "user") lastUserMessage = text;
+  if (from === "ai") lastAIResponse = text;
+  chatLog.push({ from, text });
+}
+
+async function sendMessage(text) {
+  if (!text.trim()) return;
+  addMessage(text, "user");
+  const persona = personas[personaSelect.value] || personas.default;
+  const prompt = `${persona.prefix}\n${safeMode ? "Keep all content safe for work, no explicit or sexual details." : ""}\nUser: ${text}\nAI:`;
+  try {
+    const response = await fetch(AI_HORDE_CHAT_URL, {
+      method: "POST",
+      headers: {
+        "apikey": API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt,
+        params: { max_length: 200, temperature: 0.8, top_p: 0.9 },
+        nsfw: !safeMode,
+      }),
+    });
+    const data = await response.json();
+    if (data?.generations?.[0]?.text) {
+      addMessage(data.generations[0].text.trim(), "ai");
+    } else {
+      addMessage("Oops, no response from AI.", "ai");
+    }
+  } catch (e) {
+    addMessage("Error communicating with AI Horde.", "ai");
+    console.error(e);
+  }
+}
+
+sendBtn.addEventListener("click", () => {
+  sendMessage(textInput.value);
+  textInput.value = "";
+});
+
+textInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    sendBtn.click();
+  }
+});
+
+retryBtn.addEventListener("click", () => {
+  if (!lastUserMessage) return;
+  sendMessage(lastUserMessage);
+});
+
+saveLogBtn.addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(chatLog, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "chatlog.json";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+loadLogBtn.addEventListener("click", () => loadFileInput.click());
+
+loadFileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const loadedLog = JSON.parse(event.target.result);
+      chatEl.innerHTML = "";
+      chatLog = loadedLog;
+      chatLog.forEach(({ from, text }) => addMessage(text, from));
+    } catch {
+      alert("Invalid chat log file!");
+    }
+  };
+  reader.readAsText(file);
+  loadFileInput.value = "";
+});
+
+function addImageToGallery(url) {
+  const img = document.createElement("img");
+  img.src = url;
+  img.title = "Click to preview";
+  img.addEventListener("click", () => {
+    previewImage.src = url;
+    previewModal.style.display = "flex";
+  });
+  gallery.prepend(img);
+}
+
+previewModal.addEventListener("click", (e) => {
+  if (e.target === previewModal || e.target.tagName === "A") {
+    previewModal.style.display = "none";
+    previewImage.src = "";
+  }
+});
+
+randomPromptBtn.addEventListener("click", () => {
+  const cat = promptCategory.value;
+  const prompts = cat === "all" ? randomPrompts.all : randomPrompts[cat] || [];
+  const random = prompts[Math.floor(Math.random() * prompts.length)];
+  textInput.value = random;
+});
+
+</script>
+</body>
+</html>
